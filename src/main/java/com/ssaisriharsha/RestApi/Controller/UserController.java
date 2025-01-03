@@ -62,7 +62,10 @@ public class UserController {
     }
 
     @PutMapping("/users/{id}")
-    public ResponseEntity<User> updateUser(@RequestBody User user) {
+    public ResponseEntity<User> updateUser(@RequestBody User user, @PathVariable("id") int id) {
+        if(user.getId()!=id) {
+            throw new IllegalOperationException("The endpoint's ID must match the entity's ID", HttpStatus.BAD_REQUEST.value());
+        }
         if(user.getId()==0) {
             throw new IllegalOperationException("Cannot create an entity using this endpoint.", HttpStatus.FORBIDDEN.value());
         }
