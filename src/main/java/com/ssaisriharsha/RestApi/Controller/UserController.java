@@ -7,11 +7,17 @@ import com.ssaisriharsha.RestApi.Exceptions.UserNotFoundException;
 import com.ssaisriharsha.RestApi.Service.DeleteResponse;
 import com.ssaisriharsha.RestApi.Service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.hateoas.CollectionModel;
+import org.springframework.hateoas.EntityModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
 @RestController
 @RequestMapping("/api")
@@ -25,28 +31,44 @@ public class UserController {
 
 
     @GetMapping("/users")
-    public ResponseEntity<List<User>> getAllUsers() {
+    public ResponseEntity<CollectionModel<EntityModel<User>>> getAllUsers() {
         List<User> users = userService.getAllUsers();
-        return new ResponseEntity<>(users, HttpStatus.OK);
+        List<EntityModel<User>> userModels = users.stream().map(
+                (user) -> EntityModel.of(user,
+                        linkTo(methodOn(UserController.class).getAllUsers()).withRel("users"),
+                        linkTo(methodOn(UserController.class).getUserById(user.getId())).withSelfRel()
+                )
+        ).collect(Collectors.toList());
+        CollectionModel<EntityModel<User>> userCollection = CollectionModel.of(userModels,
+                linkTo(methodOn(UserController.class).getAllUsers()).withSelfRel()
+                );
+        return new ResponseEntity<>(userCollection, HttpStatus.OK);
     }
 
     @GetMapping("/users/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable("id") int id) {
+    public ResponseEntity<EntityModel<User>> getUserById(@PathVariable("id") int id) {
         User user = userService.getUserById(id);
         if(user==null) {
             throw new UserNotFoundException("User not found.");
         }
-        return new ResponseEntity<>(user, HttpStatus.FOUND);
+        EntityModel<User> userModel = EntityModel.of(user,
+                linkTo(methodOn(UserController.class).getUserById(id)).withSelfRel(),
+                linkTo(methodOn(UserController.class).getAllUsers()).withRel("users")
+        );
+        return new ResponseEntity<>(userModel, HttpStatus.FOUND);
     }
 
     @DeleteMapping("/users/{id}")
-    public ResponseEntity<DeleteResponse> deleteUser(@PathVariable("id") int id) {
+    public ResponseEntity<EntityModel<DeleteResponse>> deleteUser(@PathVariable("id") int id) {
         int rowsAffected = userService.deleteUser(id);
         if(rowsAffected==0) {
             throw new UserNotFoundException("Requested user isn't available in the database.");
         }
         DeleteResponse res = new DeleteResponse("Requested resource deleted successfully.", HttpStatus.OK.value());
-        return new ResponseEntity<>(res, HttpStatus.OK);
+        EntityModel<DeleteResponse> deleteModel = EntityModel.of(res,
+                linkTo(methodOn(UserController.class).getAllUsers()).withRel("users")
+                );
+        return new ResponseEntity<>(deleteModel, HttpStatus.OK);
     }
 
     @PostMapping("/users")
@@ -62,7 +84,7 @@ public class UserController {
     }
 
     @PutMapping("/users/{id}")
-    public ResponseEntity<User> updateUser(@RequestBody User user, @PathVariable("id") int id) {
+    public ResponseEntity<EntityModel<User>> updateUser(@RequestBody User user, @PathVariable("id") int id) {
         if(user.getId()!=id) {
             throw new IllegalOperationException("The endpoint's ID must match the entity's ID", HttpStatus.BAD_REQUEST.value());
         }
@@ -73,6 +95,10 @@ public class UserController {
             throw new IllegalOperationException("Cannot find an entity with the given ID", HttpStatus.NOT_FOUND.value());
         }
         User u = userService.updateUser(user);
-        return new ResponseEntity<>(u, HttpStatus.ACCEPTED);
+        EntityModel<User> userModel = EntityModel.of(u,
+                linkTo(methodOn(UserController.class).getUserById(id)).withSelfRel(),
+                linkTo(methodOn(UserController.class).getAllUsers()).withRel("users")
+                );
+        return new ResponseEntity<>(userModel, HttpStatus.ACCEPTED);
     }
 }
